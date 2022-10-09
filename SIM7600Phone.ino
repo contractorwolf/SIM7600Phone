@@ -21,8 +21,7 @@ long lastGPS = millis(); // last time GPS position was requested from SIM7600
 
 const int debounceDelay = 1000;    // the debounce time; increase if the output flickers
 const int gpsWaitPeriodSeconds = 30; // wait time between requesting GPS from SIM7600
-
-long requestCount = 0;
+long requestCount = 0; // how many times GPS was requested from SIM7600
 
 boolean isTextActive = true; // disable only for test or dev
 boolean isCallActive = true; // disable only for test or dev
@@ -31,19 +30,19 @@ boolean isGPSActive = true; // disable only for test or dev
 boolean isGPSObtained = false;
 boolean isGPSCurrent = false;
 boolean isSendGPSRequested = true; // default true so that phone will send an initial GPS link when first turned on
-boolean isGPSSent = false;
+boolean isGPSSent = false; 
 
 long firstGPSTime = 0; // how many requests before GPS was obtained
 long firstGPSCount = 0; // how many milliseconds before GPS was obtained
-int GPSBodyMinSize = 80; // GPS string output from phone is between 80 and 90 characters when valid
-long GPSAquired = 0; // count how many times GPS has been valid
+int bodyMinSizeGPS = 80; // GPS string output from phone is between 80 and 90 characters when valid
+long aquiredGPSCount = 0; // count how many times GPS has been valid
 
-String GPSBody;
-String West;
-String North;
-String DecimalMinutes;
-String Degrees;
-String GPSLink;
+String bodyGPS;
+String west;
+String north;
+String decimalMinutes;
+String positionDegrees;
+String linkGPS;
 
 void setup() {
   // setup pins
@@ -51,12 +50,12 @@ void setup() {
   pinMode(textButtonPin, INPUT);
   pinMode(callButtonPin, INPUT);
 
-  GPSBody.reserve(26);
-  West.reserve(11);
-  North.reserve(11);
-  GPSLink.reserve(60);
-  Degrees.reserve(3);
-  DecimalMinutes.reserve(10);
+  bodyGPS.reserve(26);
+  west.reserve(11);
+  north.reserve(11);
+  linkGPS.reserve(60);
+  positionDegrees.reserve(3);
+  decimalMinutes.reserve(10);
 
   // begin serial comms with IDE and SIM7600
   Serial.begin(9600);// serial from arduino ide
@@ -74,7 +73,7 @@ void loop() {
   if(canSendGPS()){
     isSendGPSRequested = false;
     isGPSSent = true;
-    sendTextToDefaultNumber(GPSLink);
+    sendTextToDefaultNumber(linkGPS);
   }
 
   // check if send GPS button pressed
@@ -94,7 +93,7 @@ void loop() {
   // this will allow you to ask the SIM7600 questions via AT commands
   // several examples below 
   // ------------------------------------------
-  CheckForIDEMessages();// comment out if not needed
+  checkForIDEMessages();// comment out if not needed
   // ------------------------------------------ 
 
   // ------------------------------------------  
@@ -118,15 +117,15 @@ void loop() {
         // Serial.println(gpsInfo.length());  
 
         // test to see if the message length indicates that the GPS message actually contains valid GPS position
-        if(gpsInfo.length() >= GPSBodyMinSize && gpsInfo.length() < GPSBodyMinSize + 10){// small buffer for size
+        if(gpsInfo.length() >= bodyMinSizeGPS && gpsInfo.length() < bodyMinSizeGPS + 10){// small buffer for size
           // Get N and W values from the string by looking for a terminating character combo
-          North = getPointByTerminatingCharacter(gpsInfo, ",N,");
-          West =  getPointByTerminatingCharacter(gpsInfo, ",W,"); 
+          north = getPointByTerminatingCharacter(gpsInfo, ",N,");
+          west =  getPointByTerminatingCharacter(gpsInfo, ",W,"); 
           
           // has valid data, generate the DDM link for Google Maps
           createGPSLink();
           isGPSCurrent = true;
-          GPSAquired++;
+          aquiredGPSCount++;
 
           // mark frist time GPS aquired
           if(isGPSObtained == false){
@@ -145,21 +144,19 @@ void loop() {
         Serial.println(messageFromSIM7600);
       }
     }
-    
     //Serial.println(messageFromSIM7600.length());
   }
   // ------------------------------------------ 
 
   // check to see if it is time to request a GPS position from the cell phone
-  CheckGPSTimer();
-
+  checkGPSTimer();
+  
   //-------------------------------------------
   // LOOP COMPLETE
 }
 
-
 // test by time period for GPS
-void CheckGPSTimer() {
+void checkGPSTimer() {
   if (isGPSActive && ( millis() - lastGPS >= gpsWaitPeriodSeconds * 1000 )) {
     // Remember when we published
     lastGPS = millis();
@@ -177,8 +174,8 @@ void CheckGPSTimer() {
        Serial.print(firstGPSCount);   
     }   
         
-    Serial.print(": GPSAquired: ");
-    Serial.print(GPSAquired);  
+    Serial.print(": aquiredGPSCount: ");
+    Serial.print(aquiredGPSCount);  
     Serial.print("/");
     Serial.print(++requestCount);  
     Serial.println(" requests");
@@ -226,18 +223,18 @@ String convertToGPSDMMfromPoint(String point){
   // OUTPUT:  80%2052.284623 (needs to be formatted as DDM for Google Maps)
   int dotIndex = point.indexOf(".");
 
-  Degrees = point.substring(0, 2);
+  positionDegrees = point.substring(0, 2);
   
-  DecimalMinutes = point.substring(dotIndex - 2, point.length());
+  decimalMinutes = point.substring(dotIndex - 2, point.length());
 
-  return Degrees + "%20" + DecimalMinutes;
+  return positionDegrees + "%20" + decimalMinutes;
 }
 
 // create a Google Map string by converting the cell phone format Degrees and decimal minutes to 
 // the Google Map required DMM format to be used in a link sent via SMS
 void createGPSLink(){
   // example:  https://www.google.com/maps/place/41%2024.2028,2%2010.4418
-  GPSLink = "https://www.google.com/maps/place/" + convertToGPSDMMfromPoint(North) + ",-" + convertToGPSDMMfromPoint(West);
+  linkGPS = "https://www.google.com/maps/place/" + convertToGPSDMMfromPoint(north) + ",-" + convertToGPSDMMfromPoint(west);
   // NOTE: my W Degrees are negative 80 (-80) in the link above, if you live elsewhere check your link conversion
 }
 
@@ -276,7 +273,6 @@ bool isCallButtonPressed(){
 
   return false;
 }
-
 
 void callDefaultNumber() {
   Serial.print("MAKE CALL VIA BUTTON TO: ");
@@ -323,23 +319,21 @@ void sendTextToDefaultNumber(String message) {
 
 // format GPS link data for serial debugging display (NOT REQUIRED FOR OPERATION)
 void printGPSData() {
-  if ( GPSAquired > 0){
+  if ( aquiredGPSCount > 0){
     if(!isGPSCurrent) Serial.print("LAST ");
    
     Serial.print("north: ");
-    Serial.print(North);
+    Serial.print(north);
     Serial.print(" west: ");
-    Serial.println(West);
+    Serial.println(west);
     Serial.print("link: ");
-    Serial.println(GPSLink);
+    Serial.println(linkGPS);
   }
 }
 
-
-
 // for test communication via arduino serial, use if you plan on controlling/communicating with phone via 
 // the arduino IDE or other serial communication tools (FOR TESTING OR DEV NOT REQUIRED FOR OPERATION)
-void CheckForIDEMessages() {
+void checkForIDEMessages() {
   // ------------------------------------------
   if (Serial.available() > 0)
   {
@@ -377,9 +371,6 @@ void CheckForIDEMessages() {
   // ------------------------------------------ 
 }
 
-
-
-
 // SIM7600 AT COMMANDS
 // ------------------------------------------------------------
 void requestGPSData() {
@@ -416,5 +407,4 @@ void requestPhoneNumber() {
   Serial1.println("AT+CNUM");
   // Serial.println("COMPLETED");
 }
-
 
